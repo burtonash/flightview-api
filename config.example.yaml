@@ -1,0 +1,67 @@
+# SkyDial Pi service — example configuration.
+#
+# Copy to config.yaml and edit. The service reads ./config.yaml by default, or
+# the path in the SKYDIAL_CONFIG environment variable. Anything omitted falls
+# back to the safe defaults in skydial/config.py.
+
+# --- Where your receiver physically is. REPLACE these. -----------------------
+receiver:
+  lat: 51.5074          # your receiver latitude  (decimal degrees)
+  lon: -0.1278          # your receiver longitude (decimal degrees)
+  alt_m: 25.0           # antenna height above sea level (metres)
+
+# --- ADS-B source ------------------------------------------------------------
+# type: dump1090  -> works with dump1090-fa / readsb / tar1090 aircraft.json
+#       demo      -> replay recorded frames (no receiver needed)
+source:
+  type: dump1090
+  # File path OR http(s) URL to aircraft.json. Common locations:
+  #   http://127.0.0.1:8080/data/aircraft.json      (tar1090 / readsb)
+  #   http://127.0.0.1/dump1090-fa/data/aircraft.json
+  #   /run/dump1090-fa/aircraft.json                (local file)
+  location: "http://127.0.0.1:8080/data/aircraft.json"
+  timeout_s: 2.0
+  # demo source only — recorded frames to loop over:
+  demo_frames: "sample_data/demo_frames.json"
+
+# --- Freshness / caching -----------------------------------------------------
+cache_ttl_s: 1.0              # cache the raw source read this long
+max_position_age_s: 30.0     # drop aircraft with older positions
+feed_lost_after_s: 15.0      # no successful fetch within this -> feed-lost
+max_candidates: 10           # cap the aircraft array sent to the Dial
+
+# --- Scoring weights (tune empirically via the debug UI) ---------------------
+scoring:
+  freshness: 1.0
+  window_alignment: 2.0
+  elevation: 1.0
+  distance: 1.5
+  altitude_interest: 0.5
+  vertical_rate: 0.5
+  distance_falloff_km: 40.0
+  altitude_interest_peak_ft: 10000.0
+
+# --- Window profiles (data, not code). Add one per window. -------------------
+active_profile: front_bedroom
+profiles:
+  - id: north_up
+    name: North Up
+    radar_up_deg: 0        # 0 = north is up
+    view_cone_deg: 360     # 360 = show the whole sky
+    max_distance_km: 40
+    min_elevation_deg: 0
+    alert_enabled: true
+    quiet_mode: false
+  - id: front_bedroom
+    name: Front Bedroom
+    radar_up_deg: 0        # compass direction the window faces (0=N, 90=E, 180=S, 270=W)
+    view_cone_deg: 100     # how wide a slice of sky the window shows
+    max_distance_km: 35
+    min_elevation_deg: 5
+    alert_enabled: true
+    quiet_mode: false
+
+# --- HTTP server. Local network only — do NOT expose to the internet. --------
+server:
+  host: 0.0.0.0
+  port: 8090

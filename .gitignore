@@ -1,0 +1,18 @@
+# Local, machine-specific config (never commit real coords/keys)
+config.yaml
+
+# Enrichment cache
+*.sqlite
+*.sqlite3
+skydial_cache.db
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+build/
+dist/

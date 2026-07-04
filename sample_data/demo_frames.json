@@ -1,0 +1,21 @@
+[
+  {
+    "now": 1782475200.0,
+    "aircraft": [
+      {"hex": "407f35", "flight": "EZY82K  ", "lat": 51.5274, "lon": -0.1198, "alt_baro": 6800, "gs": 245, "track": 18, "baro_rate": 900, "squawk": "1000", "seen": 0.4, "seen_pos": 0.6, "rssi": -12.4},
+      {"hex": "400a1b", "flight": "BAW117  ", "lat": 51.5124, "lon": -0.2178, "alt_baro": 12000, "gs": 310, "track": 95, "baro_rate": -640, "squawk": "6142", "seen": 0.8, "seen_pos": 1.1, "rssi": -18.2},
+      {"hex": "43c2e9", "flight": "GXTRA   ", "lat": 51.4894, "lon": -0.1278, "alt_baro": 1200, "gs": 90, "track": 210, "baro_rate": 0, "squawk": "7000", "seen": 0.5, "seen_pos": 0.7, "rssi": -21.0},
+      {"hex": "3c6dd2", "flight": "DLH4AB  ", "lat": 51.5100, "lon": 0.2000, "alt_baro": 38000, "gs": 460, "track": 270, "baro_rate": 0, "squawk": "2000", "seen": 1.2, "seen_pos": 1.9, "rssi": -26.5},
+      {"hex": "51ab00", "flight": "STALE99 ", "lat": 51.6000, "lon": -0.3000, "alt_baro": 9000, "gs": 300, "track": 180, "baro_rate": 0, "squawk": "1234", "seen": 40.0, "seen_pos": 45.0, "rssi": -30.0}
+    ]
+  },
+  {
+    "now": 1782475202.0,
+    "aircraft": [
+      {"hex": "407f35", "flight": "EZY82K  ", "lat": 51.5289, "lon": -0.1181, "alt_baro": 7000, "gs": 246, "track": 20, "baro_rate": 880, "squawk": "1000", "seen": 0.3, "seen_pos": 0.5, "rssi": -12.1},
+      {"hex": "400a1b", "flight": "BAW117  ", "lat": 51.5121, "lon": -0.2100, "alt_baro": 11800, "gs": 309, "track": 96, "baro_rate": -600, "squawk": "6142", "seen": 0.6, "seen_pos": 0.9, "rssi": -18.0},
+      {"hex": "43c2e9", "flight": "GXTRA   ", "lat": 51.4880, "lon": -0.1290, "alt_baro": 1200, "gs": 88, "track": 205, "baro_rate": -50, "squawk": "7000", "seen": 0.4, "seen_pos": 0.6, "rssi": -20.6},
+      {"hex": "3c6dd2", "flight": "DLH4AB  ", "lat": 51.5100, "lon": 0.1900, "alt_baro": 38000, "gs": 461, "track": 271, "baro_rate": 0, "squawk": "2000", "seen": 1.0, "seen_pos": 1.6, "rssi": -26.1}
+    ]
+  }
+]
