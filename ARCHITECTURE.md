@@ -14,7 +14,7 @@
 2. **One stable contract, many presenters.** `/m5/*` is a versioned, presentation-agnostic API.
    Adding the Cardputer must not touch the compute core.
 3. **Source-independent.** Which decoder is running (`dump1090-fa` / `readsb` / `tar1090`) is an
-   open question (PRD §15). A **source adapter** normalises all of them to one canonical model, so
+   open question (PRD → Open Issues). A **source adapter** normalises all of them to one canonical model, so
    the answer can change without touching anything downstream.
 4. **Enrichment is optional and phased.** The product is impressive with zero enrichment (R1) and
    gets richer (prefix map → cached API) without the core depending on any external service. Every
@@ -65,11 +65,16 @@
 | 8 | **API Layer** | FastAPI app serving the `/m5/*` contract; precomputed, tiny payloads (≤8–12 aircraft); ~1s source cache. | Cardputer/other presenters consume the same endpoints. |
 | 9 | **Debug Web UI** | Server-rendered page: current profile, candidate table with per-factor scores, raw vs filtered counts, last fetch/poll times, optional radar preview. | The tuning surface for scoring weights; responsive by default. |
 
+> **Implementation map** (`skydial/`): [1] `sources/` · [2] `models.py` · [3] `geo.py` ·
+> [4] `filters.py` + `scoring.py` · [5] `enrichment.py` (+ `data/airlines.py`) ·
+> [6] `pipeline.py` + `alerts.py` · [7] `profiles.py` · [8] `app.py` · [9] `debug_ui.py`.
+> Config in `config.py`; entrypoint `__main__.py`.
+
 ---
 
 ## 3. Data model (canonical)
 
-Authoritative shapes live in `PRD.md` §12. Architecturally:
+Authoritative shapes live in `PRD.md` → Architecture & Technical Considerations → Data model. Architecturally:
 
 - **`Aircraft`** — raw ADS-B fields (hex, flight, lat/lon, alt, speed, track, vertical_rate, seen,
   rssi) + **computed** (bearing_deg, bearing_label, screen_angle_deg, distance_km, elevation_deg,
@@ -101,7 +106,7 @@ If a breaking change is ever needed, version the prefix (`/m5/v2/…`) rather th
 
 ## 5. Runtime & poll loop
 
-- **Stack (recommended, to confirm against PRD §15):** Python 3.11+, FastAPI + uvicorn, pydantic
+- **Stack (recommended, to confirm against PRD → Open Issues):** Python 3.11+, FastAPI + uvicorn, pydantic
   models, `httpx`/file-read for source ingest, SQLite (stdlib) for the enrichment cache, PyYAML/JSON
   config, `pytest` for tests. Rationale: matches the PRD's recommended stack, async-friendly for the
   1–2s Dial poll cadence, zero heavyweight deps on the Pi.
@@ -115,7 +120,7 @@ If a breaking change is ever needed, version the prefix (`/m5/v2/…`) rather th
 
 ---
 
-## 6. Security & safety (from PRD §14)
+## 6. Security & safety (from PRD → Architecture & Technical Considerations)
 
 - Receive-only; the service never transmits on aviation bands.
 - Bind to the **local network only** by default; no public exposure.
@@ -141,7 +146,7 @@ If a breaking change is ever needed, version the prefix (`/m5/v2/…`) rather th
 
 ## 8. Open architectural questions (track, don't block)
 
-Mirrors PRD §15 where it bites the architecture:
+Mirrors PRD → Open Issues where it bites the architecture:
 1. Which decoder + exact JSON endpoint? → isolated behind the Source Adapter; pick a default, keep the seam.
 2. systemd from the start? → yes, target packaging at MSP; keep the app a plain ASGI process so it's trivial to wrap.
 3. Config on Pi vs Dial? → **all config on the Pi** (profiles are data here); the Dial only selects.

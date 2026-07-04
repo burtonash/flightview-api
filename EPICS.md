@@ -10,26 +10,30 @@
 
 | Epic | Title | Tier | Backbone | Points | Status |
 | ---- | ----- | ---- | -------- | -----: | ------ |
-| E01 | Source ingest & canonical model | MTP | A1 | 8 | ⬜ Not started |
-| E02 | Geo & compute (distance/bearing/elevation/labels) | MTP | A3 | 8 | ⬜ Not started |
-| E03 | `/m5/sky` MTP — one selected aircraft | MTP | A2·A4 | 5 | ⬜ Not started |
-| E04 | Window profiles & cone filtering | MVP | A1·A3 | 8 | ⬜ Not started |
-| E05 | Candidate scoring (best visible ≠ nearest) | MVP | A4 | 8 | ⬜ Not started |
-| E06 | Multi-aircraft payload & `/m5/status` | MVP | A2·A5 | 5 | ⬜ Not started |
-| E07 | Alert-state derivation in the API | MVP | A5 | 5 | ⬜ Not started |
-| E08 | Multi-profile config & profile endpoints | MSP | A1 | 5 | ⬜ Not started |
-| E09 | Debug web UI | MSP | A5 | 8 | ⬜ Not started |
-| E10 | Enrichment — prefix map + cached route/model | MSP | A2 | 13 | ⬜ Not started |
-| E11 | Scoring reasons, quiet-mode, packaging & README | MSP | A4·A5·A1 | 8 | ⬜ Not started |
-| E12 | Demo/replay mode | MLP | A5 | 5 | ⬜ Not started |
+| E01 | Source ingest & canonical model | MTP | A1 | 8 | ✅ Done |
+| E02 | Geo & compute (distance/bearing/elevation/labels) | MTP | A3 | 8 | ✅ Done |
+| E03 | `/m5/sky` MTP — one selected aircraft | MTP | A2·A4 | 5 | ✅ Done |
+| E04 | Window profiles & cone filtering | MVP | A1·A3 | 8 | ✅ Done |
+| E05 | Candidate scoring (best visible ≠ nearest) | MVP | A4 | 8 | ✅ Done |
+| E06 | Multi-aircraft payload & `/m5/status` | MVP | A2·A5 | 5 | ✅ Done |
+| E07 | Alert-state derivation in the API | MVP | A5 | 5 | ✅ Done |
+| E08 | Multi-profile config & profile endpoints | MSP | A1 | 5 | ✅ Done |
+| E09 | Debug web UI | MSP | A5 | 8 | ✅ Done |
+| E10 | Enrichment — prefix map + cached route/model | MSP | A2 | 13 | 🟨 Prefix map done; route/model = seam/stub |
+| E11 | Scoring reasons, quiet-mode, packaging & README | MSP | A4·A5·A1 | 8 | ✅ Done |
+| E12 | Demo/replay mode | MLP | A5 | 5 | ✅ Done |
 | E13 | Interesting-aircraft alerts & last-seen log | MLP | A5 | 5 | ⬜ Not started |
-| E14 | 360 mode & RFID/NFC profile-switch support | MLP | A1 | 5 | ⬜ Not started |
-| E15 | Companion & bridge surfaces (Cardputer / Meshtastic / compass) | MLP | cross | 8 | ⬜ Not started |
+| E14 | 360 mode & RFID/NFC profile-switch support | MLP | A1 | 5 | 🟨 360 cone + switch endpoint done; tag reader is firmware |
+| E15 | Companion & bridge surfaces (Cardputer / Meshtastic / compass) | MLP | cross | 8 | 🟨 Cardputer = same contract; Mesh/compass future |
 
 **Legend:** ⬜ Not started · 🟨 In progress · ✅ Done · ⏸ Blocked. Tiers total — MTP 21 · MVP 26 · MSP 34 · MLP 23.
 
-**Current position:** canon just scaffolded; no code yet. **Next up: E01.** MTP exit = a real live
-aircraft served by `/m5/sky` with a roughly-correct direction (PRD §10.1 success criteria).
+**Current position:** the **API side is built and verified** — MTP + MVP + MSP back-end complete
+(E01–E09, E11) plus demo mode (E12); the service passes its pytest suite and serves live `/m5/*`
+JSON + debug UI. Remaining: E10 route/model cached provider (offline prefix enrichment is live; the
+external-lookup seam is stubbed), E13 interesting-aircraft alerts + last-seen log, and the E14/E15
+firmware/hardware-side bits. MTP/MVP eyeball-QA now wants a run against a **real** decoder feed (see
+PRD → Success Metrics); demo mode (`SKYDIAL_SOURCE_TYPE=demo`) validates the pipeline dry.
 
 > **Non-atomic flags:** none within a tier — each epic below commits story-by-story in a runnable
 > state. E03 depends on E01+E02; E05 depends on E04; E10's cache (Phase 3) may land behind Phase 2
