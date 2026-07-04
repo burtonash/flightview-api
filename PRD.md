@@ -1,1102 +1,343 @@
-# PRD.md — M5Dial ADS-B Window HUD
-
-> **Scope of this repository:** `flightview-api` contains the **Raspberry Pi back-end service** — the "SkyDial Pi Service" described below. This is the code that runs on the Raspberry Pi to ingest ADS-B data, score and enrich aircraft, and serve the tiny JSON API that an **M5Dial** (and, in future, a **Cardputer**) connects to over Wi-Fi. The M5Dial firmware is the presentation layer and lives outside this repo; it is documented here only for context so the API contract stays coherent.
-
-## 1. Product Name
-
-**SkyDial**
-
-*A window-sill aircraft radar that tells you what plane you're looking at.*
-
-Working names:
-
-* SkyDial
-* Window Radar
-* PlaneSpotter Dial
-* ADS-B HUD
-* "What's That Plane?"
-
-## 2. Product Summary
-
-SkyDial is a small, round, always-on aircraft heads-up display built using an **M5Dial** and a **Raspberry Pi ADS-B receiver**.
-
-It sits next to a window and shows a radar-style ring of aircraft that are likely visible from that window. The centre of the display shows the currently selected aircraft: callsign, direction, distance, altitude, vertical movement, and eventually airline, route, and aircraft model.
-
-The system should feel magical: someone looks out of the window, sees a plane, glances down at the Dial, and immediately knows what it is.
-
-> "That plane out there? It's easyJet, Luton to Palma, Airbus A320neo, 6,800 feet, climbing."
-
-The M5Dial is the presentation layer. The Raspberry Pi does the heavy lifting: ADS-B ingestion, filtering, scoring, enrichment, and serving a tiny UI-friendly API over Wi-Fi. **This repository is that Raspberry Pi service.**
-
-## 3. Vision
-
-Build a tiny physical object that makes the sky feel alive.
-
-This should not feel like a geeky aircraft list squeezed onto a small screen. It should feel like a beautiful little dedicated instrument: a miniature radar/compass that happens to know what is flying outside your house.
-
-The product should create a "massive wow" moment for people who see it:
-
-1. They look out of a window and notice a plane.
-2. The Dial chirps or highlights a blip.
-3. The radar ring points towards the aircraft.
-4. The centre shows the flight and route.
-5. Rotating the Dial cycles through other visible aircraft.
-6. It feels physical, immediate, and a bit magical.
-
-## 4. Goals
-
-### Primary Goals
-
-* Show the most likely aircraft visible from a specific window.
-* Use a circular radar-style UI that matches the M5Dial form factor.
-* Make direction intuitive by allowing "up" on the radar to represent either north or the window-facing direction.
-* Let the user rotate the Dial to browse other visible aircraft.
-* Provide simple audible alerts when relevant aircraft enter the window view.
-* Keep the M5Dial firmware simple by doing complex processing on the Pi.
-* Make the system easy to demo and impressive to casual observers.
-
-### Secondary Goals
-
-* Support multiple window profiles.
-* Support route/model/airline enrichment where possible.
-* Provide a basic web/debug UI on the Pi.
-* Allow future use with Cardputer Mesh Kit as a portable companion.
-* Allow future Meshtastic or notification integrations.
-
-### Non-Goals
-
-* The M5Dial will not decode ADS-B directly.
-* The M5Dial will not receive 1090 MHz aircraft signals.
-* The first versions will not support true "point at aircraft" behaviour unless a compass/magnetometer is later added.
-* The first versions will not depend on paid flight APIs.
-* The product is not intended as a safety, navigation, or aviation-critical tool.
-* The first version does not need to run away from home.
-
-## 5. Hardware Architecture
-
-### Required Hardware
-
-* Raspberry Pi already running ADS-B stack.
-* RTL-SDR or equivalent ADS-B receiver.
-* 1090 MHz ADS-B antenna.
-* M5Dial.
-* USB-C power supply for M5Dial.
-* Wi-Fi network shared by Pi and Dial.
-
-### Optional Hardware
-
-* M5Stack Cardputer Mesh Kit.
-* M5Stack GPS/BDS Unit for portable Dial use.
-* Magnetometer/compass module for true device-heading mode.
-* NFC/RFID tags for window profile switching.
-* ENV III or other sensors for extra dashboard modes.
-* M5Stack C6L as separate Meshtastic node.
-
-## 6. System Architecture
-
-```text
-ADS-B Antenna
-    ↓
-RTL-SDR
-    ↓
-Raspberry Pi
-    ↓
-dump1090 / readsb / tar1090
-    ↓
-SkyDial Pi Service   ← THIS REPOSITORY (flightview-api)
-    - aircraft parsing
-    - distance/bearing/elevation calculations
-    - window filtering
-    - scoring
-    - route/model enrichment
-    - profile management
-    - tiny JSON API
-    ↓ Wi-Fi
-M5Dial   (separate firmware repo; Cardputer in future)
-    - radar ring
-    - selected aircraft display
-    - rotary selection
-    - buzzer alerts
-    - window profile UI
-```
-
-## 7. Core User Experience
-
-### Default Experience
-
-The Dial sits next to a window.
-
-The display shows:
-
-* Outer circular radar ring.
-* Aircraft blips positioned around the ring.
-* Highlighted selected aircraft.
-* Centre aircraft info.
-* Small indication of current orientation, e.g. `↑ N`, `↑ WSW`, or `Kitchen`.
-
-When an aircraft enters the configured window view:
-
-* The Dial makes a small chirp.
-* The new aircraft appears as a blip.
-* If it is the best visible candidate, it becomes selected.
-* The centre updates with its information.
-
-### Example Display
-
-```text
-       ↑ N
-      EZY82K
-    LTN → PMI
-    A320neo
-  3.1 km NNE
-  6,800 ft ↑
-```
-
-Outer ring:
-
-* Selected aircraft: larger/pulsing blip.
-* Other visible aircraft: smaller blips.
-* Optional window cone arc.
-* Optional compass ticks.
-
-## 8. User Stories
-
-### Core Stories
-
-#### US1 — See the likely aircraft out of the window
-
-As a user looking out of a window,
-I want the Dial to show the most likely visible aircraft,
-so that I can identify what I am seeing without opening a phone or laptop.
-
-#### US2 — Understand where to look
-
-As a user,
-I want the radar ring to show the aircraft direction relative to the window,
-so that I know whether to look left, right, straight ahead, or behind.
-
-#### US3 — Browse other aircraft
-
-As a user,
-I want to rotate the Dial to cycle through other visible aircraft,
-so that I can inspect more than just the auto-selected one.
-
-#### US4 — Configure window direction
-
-As a user,
-I want to set the window-facing direction as "up" on the display,
-so that the radar ring matches what I see through that window.
-
-#### US5 — Get notified when a new aircraft appears
-
-As a user,
-I want a small sound when a relevant aircraft enters the window view,
-so that the device feels alive and draws attention at the right moment.
-
-### Advanced Stories
-
-#### US6 — See route and aircraft type
-
-As a user,
-I want to see airline, origin, destination, and aircraft model,
-so that the device feels like a proper plane-spotting instrument.
-
-#### US7 — Switch between windows
-
-As a user,
-I want named profiles for different windows,
-so that I can move the Dial around the house and preserve useful orientation settings.
-
-#### US8 — Use RFID/NFC profile switching
-
-As a user,
-I want to tap the Dial against a window tag,
-so that it automatically switches to the right window profile.
-
-#### US9 — Debug from a browser
-
-As a builder,
-I want a Pi-hosted debug page showing what the Dial is receiving,
-so that I can tune scoring and visibility rules without repeatedly flashing firmware.
-
-## 9. Feature Set
-
-## 9.1 Radar Ring
-
-The radar ring is the hero UI.
-
-### Requirements
-
-* Render a circular outer ring.
-* Plot aircraft blips by relative screen angle.
-* Support orientation offset via `radar_up_deg`.
-* Highlight selected aircraft.
-* Show non-selected visible aircraft as smaller or dimmer blips.
-* Support optional visible window cone arc.
-* Support optional compass labels/ticks.
-
-### Bearing Transform
-
-Aircraft bearing is calculated as true compass bearing from receiver location to aircraft.
-
-Display angle is calculated as:
-
-```text
-screen_angle_deg = aircraft_bearing_deg - radar_up_deg
-```
-
-Where:
-
-* `radar_up_deg = 0` means north is up.
-* `radar_up_deg = 270` means west is up.
-* `radar_up_deg = 180` means south is up.
-
-> **Back-end note:** the Pi service is responsible for computing `screen_angle_deg` from `bearing_deg` and the active profile's `radar_up_deg`, so the Dial firmware never has to do the trigonometry.
-
-### Behaviour
-
-* Top of ring means "straight out of this window" when using a window profile.
-* Aircraft outside the current window cone may be hidden, dimmed, or shown as off-view hints depending on mode.
-
-## 9.2 Centre Aircraft Card
-
-The centre of the display shows the selected aircraft.
-
-### MTP Fields
-
-* Callsign or ICAO hex.
-* Direction label, e.g. `NNE`, `WSW`.
-* Distance in km.
-* Altitude in feet.
-
-### MVP Fields
-
-* Callsign.
-* Direction label.
-* Distance.
-* Altitude.
-* Vertical movement indicator: climbing, descending, level.
-* Track arrow.
-
-### MSP Fields
-
-* Airline.
-* Route: origin → destination.
-* Aircraft type/model.
-* Friendly status line, e.g. `Look WNW`.
-
-### MLP Fields
-
-* Airline logo or stylised operator abbreviation.
-* Aircraft silhouette category.
-* Flight phase: climb, cruise, descent, approach-ish.
-* "Why selected" hint, e.g. `closest in window`, `low and ahead`.
-
-## 9.3 Auto-Selection
-
-The system should auto-select the most likely aircraft the user can see.
-
-### Candidate Scoring Inputs
-
-* Fresh position data.
-* Inside current window cone.
-* Distance.
-* Elevation angle.
-* Altitude.
-* Vertical rate.
-* Bearing closeness to window centre.
-* Signal age.
-* Optional RSSI.
-* Optional route/airport relevance.
-
-### Desired Behaviour
-
-The selected aircraft should be the best visible match, not always the nearest.
-
-Example:
-
-* A helicopter 2 km behind the user should not beat a jet 7 km directly in front of the configured window.
-* A high aircraft directly overhead may beat a lower aircraft near the horizon if it is more visually obvious.
-* Very stale aircraft positions should be ignored.
-
-### Suggested Initial Formula
-
-```text
-score =
-  freshness_score
-  + window_alignment_score
-  + elevation_score
-  + distance_score
-  + altitude_interest_score
-  + vertical_rate_score
-```
-
-This should be tuned empirically using the Pi debug view.
-
-## 9.4 Manual Selection
-
-The rotary encoder allows browsing aircraft. (Firmware-side; the Pi supports it by returning a stable, ordered aircraft array with a `selected` index.)
-
-### Controls
-
-| Action               | Behaviour                                    |
-| -------------------- | -------------------------------------------- |
-| Rotate clockwise     | Next aircraft                                |
-| Rotate anticlockwise | Previous aircraft                            |
-| Short press          | Lock/unlock selected aircraft                |
-| Long press           | Open config                                  |
-| No input timeout     | Return to auto-selection                     |
-| Touch centre         | Detail view                                  |
-| Touch ring           | Future: select aircraft near touched bearing |
-
-### Manual Mode
-
-When the user rotates:
-
-* Device enters manual selection mode.
-* Auto-selection pauses.
-* Selected aircraft follows rotary input.
-* After configurable timeout, device returns to auto mode unless locked.
-
-### Lock Mode
-
-When locked:
-
-* Selection remains on the chosen aircraft while it remains valid.
-* If the aircraft disappears or goes stale, lock expires.
-* Press again unlocks.
-
-## 9.5 Window Profiles
-
-Window profiles define how the radar behaves in a location.
-
-### Profile Fields
-
-```json
-{
-  "id": "front_bedroom",
-  "name": "Front Bedroom",
-  "radar_up_deg": 0,
-  "view_cone_deg": 100,
-  "max_distance_km": 35,
-  "min_elevation_deg": 5,
-  "alert_enabled": true
-}
-```
-
-### Required Profiles
-
-* Default North-Up.
-* At least one configurable window profile.
-
-### Desired Profiles
-
-* Front bedroom.
-* Kitchen.
-* Garden.
-* Portable / full 360 mode.
-
-### Profile Selection Methods
-
-#### MTP
-
-Hard-coded profile in Pi config.
-
-#### MVP
-
-Long-press Dial to select profile.
-
-#### MSP
-
-Pi-hosted web config page.
-
-#### MLP
-
-RFID/NFC tags attached near windows. Tapping the Dial to a tag switches to that window profile.
-
-## 9.6 Alerts
-
-The Dial includes a buzzer and should make small, tasteful alerts. The Pi is responsible for the *decisions* that trigger alerts (new aircraft in cone, best-candidate change, feed lost) by exposing enough state in the API; the buzzer itself is firmware.
-
-### Alert Events
-
-* New aircraft enters the current window cone.
-* Auto-selected aircraft changes.
-* Aircraft becomes almost straight ahead.
-* Low/close aircraft appears.
-* Data feed lost.
-* Wi-Fi reconnected.
-
-### Alert Patterns
-
-| Event                | Sound              |
-| -------------------- | ------------------ |
-| New visible aircraft | Single soft chirp  |
-| New best candidate   | Double chirp       |
-| Aircraft leaves view | Low soft tone      |
-| Feed lost            | Short warning buzz |
-| Feed restored        | Positive chirp     |
-
-### Alert Principles
-
-* Alerts should feel charming, not annoying.
-* Quiet mode must be available.
-* Repeated alerts should be rate-limited.
-* No sound should play on every refresh.
-
-## 9.7 Pi Service
-
-The Pi service is the core product brain **and the subject of this repository.**
-
-### Responsibilities
-
-* Fetch raw aircraft JSON from local ADS-B decoder.
-* Normalise data across `dump1090`, `readsb`, or `tar1090`.
-* Calculate distance from receiver.
-* Calculate true bearing.
-* Calculate elevation angle.
-* Filter stale aircraft.
-* Filter based on selected profile.
-* Score candidates.
-* Enrich aircraft data where possible.
-* Serve M5-friendly JSON.
-* Serve optional debug web UI.
-
-### Initial Endpoints
-
-```text
-GET /m5/sky
-GET /m5/sky?profile=front_bedroom
-GET /m5/status
-GET /m5/profiles
-POST /m5/profile
-```
-
-### Example `/m5/sky` Response
-
-```json
-{
-  "ok": true,
-  "now": 1782475200,
-  "profile": {
-    "id": "front_bedroom",
-    "name": "Front Bedroom",
-    "radar_up_deg": 0,
-    "view_cone_deg": 100
-  },
-  "selected": 0,
-  "aircraft": [
-    {
-      "flight": "EZY82K",
-      "hex": "407F35",
-      "airline": "easyJet",
-      "route": "LTN → PMI",
-      "model": "Airbus A320neo",
-      "bearing_deg": 18,
-      "bearing_label": "NNE",
-      "screen_angle_deg": 18,
-      "distance_km": 3.1,
-      "alt_ft": 6800,
-      "speed_kt": 245,
-      "track_deg": 152,
-      "track_arrow": "↘",
-      "vertical_rate_fpm": 900,
-      "vertical_label": "climbing",
-      "elevation_deg": 24,
-      "seen": 0.8,
-      "score": 91,
-      "selected_reason": "ahead and visible"
-    }
-  ]
-}
-```
-
-## 9.8 Data Enrichment
-
-### Raw ADS-B Fields
-
-Expected from decoder:
-
-* ICAO hex.
-* Callsign.
-* Latitude.
-* Longitude.
-* Altitude.
-* Ground speed.
-* Track.
-* Vertical rate.
-* Squawk.
-* Seen age.
-* RSSI if available.
-
-### Enriched Fields
-
-Nice-to-have:
-
-* Airline name.
-* Origin.
-* Destination.
-* Aircraft model.
-* Aircraft manufacturer.
-* Registration.
-* Wake category or aircraft size class.
-
-### Enrichment Strategy
-
-#### Phase 1
-
-No external enrichment. Show:
-
-* callsign
-* direction
-* distance
-* altitude
-
-#### Phase 2
-
-Local static mapping:
-
-* airline prefix mapping, e.g. `BAW = British Airways`, `EZY = easyJet`
-* aircraft hex database if available
-
-#### Phase 3
-
-Cached route/model lookup:
-
-* API-backed lookup where available
-* local cache to avoid repeated API calls
-* graceful fallback when data unavailable
-
-### Enrichment Principle
-
-The product must still be impressive without route/model data. Route/model enriches the wow, but the core magic is direction + visible aircraft matching.
-
-## 9.9 Debug Web UI
-
-A simple Pi-hosted page should show what the Dial sees. (Served by this repository's service.)
-
-### Purpose
-
-* Tune visibility scoring.
-* Verify window direction.
-* See candidate aircraft.
-* Debug stale data.
-* Preview M5Dial payload.
-
-### Features
-
-* Current profile.
-* Current selected aircraft.
-* List of candidate aircraft with scores.
-* Bearing/elevation/distance table.
-* Raw vs filtered count.
-* Last ADS-B fetch time.
-* Last M5Dial poll time.
-* Optional browser radar preview.
-
-## 10. Phasing
-
-## 10.1 Minimum Testable Product — MTP
-
-### Objective
-
-Prove the core loop:
-
-> Pi reads aircraft → filters candidates → Dial displays one selected aircraft.
-
-### Must Have
-
-#### Pi
-
-* Read local `aircraft.json`.
-* Parse aircraft with lat/lon.
-* Calculate distance and bearing.
-* Return top nearest aircraft via `/m5/sky`.
-* Hard-coded home receiver coordinates.
-* Hard-coded profile with `radar_up_deg = 0`.
-
-#### Dial
-
-* Connect to Wi-Fi.
-* Poll `/m5/sky`.
-* Display selected callsign/hex.
-* Display direction label.
-* Display distance.
-* Display altitude.
-* Draw simple outer circle.
-* Draw one blip for selected aircraft.
-
-### Does Not Need
-
-* Route/model enrichment.
-* Multiple profiles.
-* Alerts.
-* Manual rotary selection.
-* Fancy radar ring.
-* Window cone filtering.
-* Debug UI.
-
-### Success Criteria
-
-* Dial updates every 1–2 seconds.
-* Dial shows a real live aircraft from the Pi.
-* The displayed direction broadly matches where the aircraft is.
-* The device can sit powered by a window for 30 minutes without crashing.
-
-### MTP Example Display
-
-```text
-EZY82K
-NNE
-3.1 km
-6800 ft
-```
-
-## 10.2 Minimum Viable Product — MVP
-
-### Objective
-
-Make it useful as a window-sill aircraft identifier.
-
-### Must Have
-
-#### Pi
-
-* Window profile with:
-  * `radar_up_deg`
-  * `view_cone_deg`
-  * `max_distance_km`
-  * `min_elevation_deg`
-* Candidate filtering by window cone.
-* Basic scoring.
-* `/m5/sky` returns up to 8 visible aircraft.
-* Selected aircraft is best candidate, not simply nearest.
-* Basic status endpoint.
-
-#### Dial
-
-* Full radar ring with multiple aircraft blips.
-* Selected blip highlighted.
-* Centre aircraft display.
-* Rotary selection.
-* Auto-selection timeout.
-* Press to return to auto.
-* Buzzer alert for new best candidate.
-* Simple config for current profile or hard-coded profile selection.
-
-### Success Criteria
-
-* Someone looking out of the configured window can use the Dial to identify likely visible aircraft.
-* Turning the Dial cycles through other aircraft.
-* Auto-selection feels broadly sensible.
-* Alerts happen at useful moments, not constantly.
-* The product is demoable to family/friends.
-
-### MVP Example Display
-
-```text
-↑ N
-EZY82K
-Look NNE
-3.1 km
-6,800 ft ↑
-```
-
-## 10.3 Minimum Shareable Product — MSP
-
-### Objective
-
-Make it polished enough to show online or share with other makers.
-
-### Must Have
-
-#### Pi
-
-* Config file for multiple profiles.
-* Pi-hosted debug web UI.
-* Better scoring with visible reasons.
-* Airline prefix enrichment.
-* Optional local aircraft model database.
-* Caching layer for enrichment.
-* Installer/setup notes.
-* Clear README.
-
-#### Dial
-
-* Polished radar ring.
-* Smooth redraw.
-* Distinct states:
-  * connecting
-  * no aircraft
-  * active
-  * feed lost
-  * config
-* Named profile selection.
-* Better alert patterns.
-* Quiet mode.
-* Detail view.
-* Attractive typography/layout within M5Dial constraints.
-
-### Nice to Have
-
-* RFID/NFC profile switching.
-* Browser preview of radar ring.
-* Simple OTA or easy firmware update route.
-* Demo mode using recorded ADS-B data.
-
-### Success Criteria
-
-* Project can be filmed and understood in under 20 seconds.
-* Another technically capable person can build it from the README.
-* The UI looks intentional rather than like a debug display.
-* It has a clear "wow" demo:
-  * point at window
-  * Dial chirps
-  * route/model appears
-  * aircraft blip matches real sky position
-
-### MSP Demo Script
-
-1. Show the Dial next to the window.
-2. Show an aircraft outside.
-3. Dial chirps.
-4. Camera moves to Dial.
-5. It shows:
-   * `BAW217`
-   * `Heathrow → Barcelona`
-   * `A320neo`
-   * `Look WNW`
-6. Rotate the Dial to show other aircraft around the sky.
-
-## 10.4 Maximum Lovable Product — MLP
-
-### Objective
-
-Make it feel like a beautiful dedicated consumer object.
-
-### Must Have
-
-#### Experience
-
-* Feels alive even when idle.
-* Subtle sweep/radar animation.
-* Soft pulsing selected blip.
-* Beautiful alert sounds within buzzer limitations.
-* Route/model/operator enrichment feels instant due to caching.
-* Window profiles feel effortless.
-* Device recovers cleanly from Wi-Fi/feed loss.
-* Works reliably as an always-on appliance.
-
-#### Advanced Features
-
-* RFID/NFC window profile tags.
-* Full 360 mode and window HUD mode.
-* Interesting aircraft alerts.
-* Aircraft trails.
-* Day/night display mode.
-* Brightness control.
-* Quiet hours.
-* Historical "last seen" mini log.
-* Optional Cardputer companion view.
-* Optional Meshtastic notification bridge.
-* Optional portable mode using GPS and phone hotspot.
-* Optional compass/magnetometer support for true heading.
-
-#### Visual Polish
-
-* Radar ring has:
-  * outer compass ticks
-  * view cone arc
-  * selected aircraft pulse
-  * aircraft travel direction tick
-  * off-view hint markers
-* Centre card has:
-  * callsign
-  * airline/route/model
-  * direction/distance/altitude
-  * vertical state
-* Loading and error states are charming.
-
-### Success Criteria
-
-* People immediately ask, "Wait, how does it know that?"
-* It becomes something worth leaving plugged in permanently.
-* It feels more like a tiny aviation instrument than a dev board project.
-* The maker community would recognise it as a polished, desirable build.
-
-## 11. UI States
-
-### 11.1 Boot
-
-```text
-SkyDial
-Connecting...
-```
-
-### 11.2 Wi-Fi Connected, Feed Connecting
-
-```text
-SkyDial
-Wi-Fi OK
-Waiting for Pi...
-```
-
-### 11.3 No Aircraft
-
-```text
-Quiet sky
-No visible aircraft
-```
-
-### 11.4 Active
-
-Shows radar ring and selected aircraft.
-
-### 11.5 Manual Selection
-
-Small indicator:
-
-```text
-MANUAL
-```
-
-Auto-selection paused.
-
-### 11.6 Locked Selection
-
-Small indicator:
-
-```text
-LOCKED
-```
-
-### 11.7 Feed Lost
-
-```text
-ADS-B feed lost
-Last seen 42s ago
-```
-
-### 11.8 Config
-
-```text
-Profile
-Front Bedroom
-↑ N
-Cone 100°
-```
-
-## 12. Data Model
-
-### Aircraft Object
-
-```json
-{
-  "flight": "EZY82K",
-  "hex": "407F35",
-  "airline": "easyJet",
-  "origin": "LTN",
-  "destination": "PMI",
-  "route": "LTN → PMI",
-  "model": "Airbus A320neo",
-  "lat": 51.9,
-  "lon": -0.2,
-  "bearing_deg": 18,
-  "bearing_label": "NNE",
-  "screen_angle_deg": 18,
-  "distance_km": 3.1,
-  "alt_ft": 6800,
-  "speed_kt": 245,
-  "track_deg": 152,
-  "track_arrow": "↘",
-  "vertical_rate_fpm": 900,
-  "vertical_label": "climbing",
-  "elevation_deg": 24,
-  "seen": 0.8,
-  "seen_pos": 1.1,
-  "rssi": -12.4,
-  "score": 91,
-  "selected_reason": "ahead and visible"
-}
-```
-
-### Profile Object
-
-```json
-{
-  "id": "front_bedroom",
-  "name": "Front Bedroom",
-  "radar_up_deg": 0,
-  "view_cone_deg": 100,
-  "max_distance_km": 35,
-  "min_elevation_deg": 5,
-  "alert_enabled": true,
-  "quiet_mode": false
-}
-```
-
-## 13. Technical Design Notes
-
-### Pi Language
-
-Recommended:
-
-* Python.
-* Flask or FastAPI.
-* Requests or direct file read for ADS-B JSON.
-* Optional SQLite cache for enrichment.
-
-### Dial Firmware
-
-Recommended:
-
-* Arduino IDE or PlatformIO.
-* M5Dial / M5Unified / M5GFX.
-* WiFi.
-* HTTPClient.
-* ArduinoJson.
-
-### Polling
-
-Suggested:
-
-* Dial polls Pi every 1–2 seconds.
-* Pi may cache ADS-B source response for 1 second.
-* Dial should handle stale response gracefully.
-
-### Performance Constraints
-
-* Dial should receive small JSON only.
-* Limit aircraft array to 8–12 candidates.
-* Avoid parsing full raw ADS-B feed on M5Dial.
-* Pi should precompute angles and labels.
-
-### Reliability
-
-* If Pi unavailable, show clear "feed lost" state.
-* If Wi-Fi unavailable, retry with friendly state.
-* If no aircraft in cone, show "quiet sky".
-* If selected aircraft disappears, auto-select next best.
-
-## 14. Security and Safety
-
-* Device is receive-only from an aviation perspective.
-* It must not transmit ADS-B or aviation-band data.
-* Pi service should be local network only by default.
-* No public exposure required.
-* API keys, if used for enrichment, must remain on the Pi, never on the Dial.
-* The product must not present itself as aviation-grade, safety-critical, or suitable for navigation.
-
-## 15. Open Questions
-
-1. Which ADS-B stack is running on the Pi: `dump1090-fa`, `readsb`, `tar1090`, or other?
-2. What exact local aircraft JSON endpoint is available?
-3. What are the actual receiver coordinates?
-4. Which window should be the first target profile?
-5. What is the window's approximate compass direction?
-6. What should the default view cone be: 70°, 90°, 100°, 120°?
-7. Should aircraft behind the user be hidden or shown dimmed?
-8. Which enrichment source should be used first?
-9. Should the Pi service be packaged as a systemd service from the start?
-10. Should the Dial support config locally, or should all config live on the Pi?
-
-## 16. Suggested Build Order
-
-### Step 1 — Pi Data Probe
-
-* Confirm ADS-B JSON endpoint.
-* Write script to fetch aircraft.
-* Print nearest aircraft with distance/bearing.
-
-### Step 2 — Pi API MTP
-
-* Create `/m5/sky`.
-* Return one selected aircraft.
-* Add receiver coordinates.
-* Add bearing/distance/elevation.
-
-### Step 3 — Dial MTP
-
-* Connect to Wi-Fi.
-* Fetch `/m5/sky`.
-* Display callsign/distance/altitude.
-* Draw simple circle and one blip.
-
-### Step 4 — Multi-Aircraft Radar
-
-* Return up to 8 candidates.
-* Draw multiple blips.
-* Highlight selected.
-
-### Step 5 — Window Profile
-
-* Add `radar_up_deg`.
-* Add `view_cone_deg`.
-* Filter/score by window.
-
-### Step 6 — Rotary Interaction
-
-* Rotate to cycle aircraft.
-* Press to return to auto.
-* Add manual timeout.
-
-### Step 7 — Alerts
-
-* Chirp when best candidate changes.
-* Add quiet mode/rate limiting.
-
-### Step 8 — Polish
-
-* Improve radar ring.
-* Add centre card.
-* Add error/loading states.
-* Add debug web UI.
-
-### Step 9 — Enrichment
-
-* Add airline prefix mapping.
-* Add route/model cache.
-* Display route/model when available.
-
-### Step 10 — Shareable Package
-
-* README.
-* Wiring/power notes.
-* Config examples.
-* Demo mode.
-* Screenshots/video.
-
-## 17. MVP Acceptance Test
-
-Given:
-
-* The Pi is receiving ADS-B aircraft.
-* The M5Dial is powered and connected to Wi-Fi.
-* A window profile is configured.
-
-When:
-
-* An aircraft enters the configured view cone.
-
-Then:
-
-* The Dial chirps once.
-* The aircraft appears on the outer radar ring in the correct relative direction.
-* The centre shows callsign, direction, distance, and altitude.
-* Rotating the Dial selects other aircraft.
-* Pressing the Dial returns to auto-selection.
-* If no aircraft are visible, the Dial shows a calm "quiet sky" state.
-
-## 18. Wow Acceptance Test
-
-A non-technical person should be able to look at the device and understand it within five seconds.
-
-They should be able to say:
-
-> "Oh, the dots are planes around us, and the middle is the plane we're probably looking at."
-
-Within twenty seconds, they should say something like:
-
-> "That's actually really cool."
-
-The product succeeds when it feels like a tiny, delightful aviation instrument rather than a development board project.
+# SkyDial — Product Requirements Document (PRD)
+
+> **Scope of this repository:** `flightview-api` is the **Raspberry Pi back-end service** (the
+> "SkyDial Pi Service"). It ingests ADS-B data, computes distance/bearing/elevation, filters and
+> scores aircraft against window profiles, enriches them, and serves a tiny JSON API over Wi-Fi to
+> an **M5Dial** (and, in future, a **Cardputer**) presentation layer. The Dial firmware lives
+> outside this repo and is referenced here only so the API contract stays coherent.
+>
+> **Living document.** This PRD evolves with the project. The **Requirements** and **Out of Scope**
+> tables are the single source of requirement truth and are **two views of one dataset** with
+> `STORYMAP.md` — the `Action`/`Step` columns are the map's Activities/Steps, and the `Importance`
+> lozenge moves an item between scope and out-of-scope. Importance ↔ delivery tier:
+> **`ALPHA` = MTP (R1) · `BETA` = MVP (R2) · `GTM` = MSP (R3) · `Future` = MLP (ribs) / deferred.**
+> Keep this table, `STORYMAP.md`, and `EPICS.md` in sync.
+
+| **Planning Stage** | Concept → Ballpark → Initial Review → Initial Scoping → Estimation → Commercials → Sign-Off → Resourced → **In Flight** → Delivered → Launched |
+| --- | --- |
+| **Document owner** | @burtonash |
+| **Business Sponsor** | Personal / maker project |
+| **Product Owner** | @burtonash |
+| **Project Manager** | @burtonash |
+| **Technical Lead(s)** | @burtonash |
+| **Team(s)** | SkyDial (Pi back-end + Dial firmware) |
+
+## Overview
+
+SkyDial is a small, round, always-on aircraft heads-up display: an **M5Dial** on a window sill,
+fed by a **Raspberry Pi ADS-B receiver**. It shows a radar-style ring of the aircraft likely
+visible from that window, with the best candidate selected in the centre — callsign, direction,
+distance, altitude, and (later) airline, route and model. Someone glances out, sees a plane,
+glances at the Dial, and instantly knows what it is. Winning looks like a stranger saying *"wait,
+how does it know that?"* within twenty seconds. This repo is the **brain**: the Pi does all the
+ingestion, maths, scoring and enrichment and serves a tiny precomputed JSON API; the Dial stays
+dumb and just draws it.
+
+## Customer Problem
+
+You can see a plane out of the window but have no idea what it is. Existing answers — a phone app,
+a laptop tab, a full tar1090 map — are heavyweight, require reaching for a device, and read like a
+data table rather than a glanceable instrument. There's no *ambient, dedicated, delightful* object
+that answers "what's that plane?" at a glance.
+
+### Customer Pain Points
+
+| Pain | Why it matters |
+| --- | --- |
+| "What's that plane?" needs a phone/laptop | Breaks the moment; kills the ambient magic of just looking up |
+| ADS-B maps are dense and technical | Nearest ≠ what you can actually see out *this* window; no glance-value |
+| Existing tools aren't a dedicated object | Nothing to leave on the sill that makes the sky feel alive |
+| Home ADS-B receivers are underused | A working feed exists but delivers no everyday, delightful payoff |
+
+## Strategic Value
+
+* **Delight-led.** The bet is emotional, not analytical: a tiny physical instrument that produces a
+  reliable "wow". That's what makes it worth building, keeping plugged in, and sharing.
+* **Leverage existing assets.** A Pi ADS-B feed is already running; SkyDial turns that latent data
+  into an everyday experience with a cheap presentation layer.
+* **Shareable / community.** A clean, clonable maker build (README + config + demo mode) spreads
+  organically and invites extension (Cardputer, Meshtastic, 360 mode).
+
+## Value Proposition
+
+|  | **Value to Customer** | **Value to Us** |
+| --- | --- | --- |
+| **New Business** | An ambient "what's that plane?" instrument that just works | A flagship, demoable maker project |
+| **Existing Business** | Turns an existing ADS-B feed into daily delight | Reuse of the home receiver investment |
+| **Partners** | A clonable, hackable, well-documented build | Community goodwill; contributions and extensions |
+
+## Why now
+
+### Market / maker pull
+Affordable round smart displays (M5Dial) + mature local ADS-B decoders (dump1090/readsb/tar1090)
+make a dedicated glanceable instrument cheap and buildable today.
+
+### Capability pull
+Home ADS-B is common and reliable; the raw data is sitting there precomputed-adjacent — only the
+scoring, enrichment and a tiny API stand between it and delight.
+
+### Internal / personal pull
+An existing running receiver, a clear wow-driven vision, and appetite to ship a lovable object.
+
+## Objectives
+
+1. **Nail the glance.** Serve the *most likely visible* aircraft for a given window (not merely the
+   nearest) with correct direction, so a look-down instantly answers "what's that?".
+2. **Keep the Dial dumb.** Precompute every angle, label, and state server-side; ship tiny JSON.
+3. **Be impressive with zero enrichment, magical with it.** Core value from direction + matching;
+   airline/route/model enriches the wow without becoming a dependency.
+4. **Run as an appliance.** Always-on, self-healing across feed/Wi-Fi loss, never a crashed board.
+5. **Be clonable.** Another maker can rebuild it from the README with a demo mode to prove it.
+
+## Constraints & Dependencies
+
+**Delivery constraints**
+1. **M5Dial resources.** Small round screen, limited RAM/CPU → payloads must be tiny (≤8–12 aircraft) and pre-labelled.
+2. **Poll cadence.** Dial polls every 1–2s → the Pi must answer fast and cache the source read (~1s).
+
+**Internal dependencies**
+3. **Running ADS-B decoder.** Requires a local `dump1090-fa`/`readsb`/`tar1090` producing `aircraft.json`.
+4. **Shared Wi-Fi.** Pi and Dial on the same LAN.
+
+**Vendor and partner dependencies**
+5. **Enrichment sources.** Optional route/model lookups; must degrade gracefully and be cached — never a hard dependency.
+
+**Regulatory dependencies**
+6. **Receive-only posture.** Nothing transmits on aviation bands; not presented as safety/nav-grade.
+
+## Assumptions
+
+### Platform and architecture
+1. A local decoder exposes `aircraft.json` in a dump1090-compatible shape (or adaptable to it).
+2. Receiver coordinates are known and fixed per install.
+
+### Vendor and commercial
+3. Free/offline enrichment (airline-prefix map, static hex DB) covers most of the wow; paid APIs are optional polish.
+
+### Market and customer
+4. The primary user watches from a fixed window; portable/360 use is a later delight, not day-one.
+
+## Risks
+
+### Product risks
+1. **Selection feels wrong.** The auto-pick doesn't match what the eye sees. _Mitigation:_ config-weighted scoring tuned empirically via the debug UI; expose per-factor reasons.
+2. **Alert fatigue.** Chirps on every refresh become annoying. _Mitigation:_ API derives discrete transitions only; rate-limit + quiet-mode.
+
+### Delivery risks
+3. **Decoder variance.** Field names differ across dump1090/readsb/tar1090. _Mitigation:_ source-adapter seam normalising to one canonical model.
+4. **Feed/Wi-Fi flakiness.** Drops make the device look broken. _Mitigation:_ explicit machine-readable states + self-healing poll loop with last-good timestamps.
+
+## Persona
+
+| **Organization** | **Type** | **Persona** | **Involvement** | **Primary Value Sought** |
+| --- | --- | --- | --- | --- |
+| **Household** | `USER` | Skye — Window-Watcher | Lives with the Dial on the sill | Instantly know what plane is overhead, at a glance |
+| **Household** | `INFLUENCER` | Guest — Observer | Sees it, spreads the "wow" | Delight: "how does it *know* that?" |
+| **Maker** | `SIGN-OFF` / `DELIVERY` | Mak — Maker/Builder (you) | Builds, aims, tunes, runs, shares | A magical, reliable, shareable build |
+| **Community** | `IN-LIFE SERVICE` | Fellow makers | Rebuild from README, extend | A clonable, hackable project |
+
+## Core Motions
+
+| **Use Case** | **Description** | **Primary Personas** |
+| --- | --- | --- |
+| **Ingest** | Read + normalise the decoder feed to a canonical model | Mak |
+| **Compute** | Distance, bearing, elevation, screen-angle, labels | Skye |
+| **Filter & Score** | Window-cone/staleness filtering; best-visible scoring | Skye |
+| **Enrich** | Airline/route/model, cached + graceful fallback | Skye |
+| **Serve** | Tiny precomputed `/m5/*` JSON to the Dial | Skye |
+| **Configure** | Window profiles as data; switch active profile | Mak / Skye |
+| **Alert** | Derive discrete alert transitions for the buzzer | Skye |
+| **Tune / Debug** | Pi-hosted debug UI to tune scoring/orientation | Mak |
+
+## Spectrum of Use Cases
+
+| **Use Case** | **Description** |
+| --- | --- |
+| Single-window identify | Fixed sill, one profile — the core daily motion |
+| Multi-window roaming | Named profiles; move the Dial around the house |
+| Portable / 360 | Omni cone for garden/travel (later delight) |
+| Demo mode | Replay recorded ADS-B for filming with no live traffic |
+| Community rebuild | Another maker clones from README + config examples |
+
+### Notes on Go to Market
+Not a commercial launch — GTM is a shareable build: a <20s film of the wow, a clean README, and a
+demo mode so it lands even when the sky is quiet.
+
+## Requirements
+
+> 8-column story-mapping table, one block per **Activity** (matches `STORYMAP.md` backbone
+> A1–A5). `Importance` uses phase lozenges (see tier mapping at top). `Ticket` links to the
+> `EPICS.md` epic/story. Firmware-side rows are marked `_(Dial)_` in Notes and tracked here only for
+> contract coherence.
+
+### A1 — Aim it at my window
+
+| **Requirement (stub)** | **User Story** | Importance | **Persona** | **Action** | **Step** | Ticket | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Read decoder JSON → canonical model | As Mak, I want the service to read the local `aircraft.json` and normalise it, so downstream code speaks one vocabulary. | `ALPHA` | Mak | A1 | 1.1 | E01/S01.1–2 | Source-adapter seam |
+| Config: receiver coords + source path | As Mak, I want coords and source in top-of-file config, so I can point it at my Pi without editing logic. | `ALPHA` | Mak | A1 | 1.1 | E01/S01.3 | |
+| Multi-decoder source adapter | As Mak, I want dump1090/readsb/tar1090 tolerated behind one interface, so decoder choice doesn't matter. | `BETA` | Mak | A1 | 1.1 | E04/S04.3 | |
+| systemd packaging + config file | As Mak, I want a systemd unit + config, so it runs as an appliance. | `GTM` | Mak | A1 | 1.1 | E11/S11.4 | |
+| Hard-coded north-up profile | As Mak, I want one north-up profile to start, so the skeleton works. | `ALPHA` | Mak | A1 | 1.2 | E01/E03 | |
+| Window profile fields | As Mak, I want `radar_up_deg`/`view_cone_deg`/`max_distance_km`/`min_elevation_deg`, so the radar matches my window. | `BETA` | Mak | A1 | 1.2 | E04/S04.1 | |
+| Multi named profiles + endpoints | As Skye, I want named profiles + `GET /m5/profiles` + `POST /m5/profile`, so I can move the Dial around. | `GTM` | Skye/Mak | A1 | 1.2 | E08 | |
+| RFID/NFC profile switch (API) | As Skye, I want the API to accept tag-driven profile switches, so tapping a window tag changes profile. | `Future` | Skye | A1 | 1.2 | E14/S14.2 | |
+
+### A2 — See what I'm looking at
+
+| **Requirement (stub)** | **User Story** | Importance | **Persona** | **Action** | **Step** | Ticket | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `/m5/sky` selected card fields | As Skye, I want `GET /m5/sky` to return callsign/hex, distance, altitude, so the Dial shows what I'm looking at. | `ALPHA` | Skye | A2 | 2.1 | E03/S03.1 | |
+| Vertical label + track arrow | As Skye, I want climb/descend + heading arrow, so I read movement at a glance. | `BETA` | Skye | A2 | 2.1 | E06/S06.2 | |
+| Render centre card | As Skye, I want the centre card drawn, so I can read the selected aircraft. | `ALPHA` | Skye | A2 | 2.1 | firmware | _(Dial)_ |
+| Airline-prefix enrichment | As Skye, I want `EZY→easyJet` offline mapping, so the card names the airline. | `GTM` | Skye | A2 | 2.2 | E10/S10.1 | |
+| Cached route/model lookup | As Skye, I want cached route+model with fallback, so enrichment feels instant and never breaks offline. | `GTM` | Skye | A2 | 2.2 | E10/S10.3 | SQLite, TTL |
+| `selected_reason` hint | As Skye, I want a "why this plane" line, so the pick is explained. | `GTM` | Skye | A2 | 2.2 | E10/S10.4 | |
+| Operator/silhouette/phase | As Skye, I want operator abbrev, silhouette class and flight phase, so the card feels premium. | `Future` | Skye | A2 | 2.2 | E13+ | |
+
+### A3 — Know where to look
+
+| **Requirement (stub)** | **User Story** | Importance | **Persona** | **Action** | **Step** | Ticket | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| True bearing + label + screen-angle | As Skye, I want `bearing_deg`/`bearing_label`/`screen_angle_deg` precomputed, so the ring points correctly for any orientation. | `ALPHA` | Skye | A3 | 3.1 | E02 | |
+| Elevation + stale filter | As Skye, I want elevation angle and stale positions dropped, so overhead vs horizon is clear and no ghosts. | `ALPHA` | Skye | A3 | 3.1 | E02 | |
+| Ring + one blip | As Skye, I want a ring + blip roughly in the right direction, so I know where to look. | `ALPHA` | Skye | A3 | 3.1 | firmware | _(Dial)_ |
+| Window-cone filtering | As Skye, I want candidates filtered to the cone/distance/elevation, so I only see what's out this window. | `BETA` | Skye | A3 | 3.2 | E04/S04.2 | |
+| Off-view hints + cone arc | As Skye, I want edge hints + cone arc data, so near-edge traffic is indicated. | `GTM` | Skye | A3 | 3.2 | E09+ | |
+| Full radar ring, multi-blip | As Skye, I want multiple blips with the selected highlighted, so I see the whole sky. | `BETA` | Skye | A3 | 3.2 | firmware | _(Dial)_ |
+
+### A4 — Explore the sky
+
+| **Requirement (stub)** | **User Story** | Importance | **Persona** | **Action** | **Step** | Ticket | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Best-visible candidate scoring | As Skye, I want the best *visible* aircraft auto-selected (not nearest), so a jet ahead beats a chopper behind. | `BETA` | Skye | A4 | 4.1 | E05/S05.1 | Config-weighted |
+| Ordered candidates + selected index | As Skye, I want up to 8–12 ordered candidates + `selected` + `score`, so I can browse. | `BETA` | Skye | A4 | 4.1 | E06/S06.1 | |
+| Per-factor scoring reasons | As Mak, I want per-factor score breakdown, so tuning is data-driven. | `GTM` | Mak | A4 | 4.1 | E11/S11.1 | |
+| Stable ordering for rotary | As Skye, I want stable ordering across polls, so rotary next/prev is coherent. | `BETA` | Skye | A4 | 4.2 | E05/E06 | |
+| Rotary browse / lock / timeout | As Skye, I want to rotate to cycle, press to lock, and auto-return to auto. | `BETA` | Skye | A4 | 4.2 | firmware | _(Dial)_ |
+
+### A5 — Feel it come alive
+
+| **Requirement (stub)** | **User Story** | Importance | **Persona** | **Action** | **Step** | Ticket | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Alert-state transitions in API | As Skye, I want the API to flag new-in-cone/new-best/feed-lost transitions, so the Dial chirps at the right moment. | `BETA` | Skye | A5 | 5.1 | E07/S07.1 | Dial owns the sound |
+| Rate-limit + quiet-mode flags | As Skye, I want rate-limiting + quiet-mode, so it never chirps every refresh and can go silent. | `GTM` | Skye | A5 | 5.1 | E11/S11.2 | |
+| Interesting-aircraft alerts | As Skye, I want low/close/unusual flagged, so standout moments get noticed. | `Future` | Skye | A5 | 5.1 | E13/S13.1 | |
+| `/m5/status` feed health | As Mak, I want feed health/last-fetch/counts/state, so I can see the service is alive. | `BETA` | Mak | A5 | 5.2 | E06/S06.3 | |
+| Machine-readable states | As Skye, I want connecting/quiet-sky/active/feed-lost, so every UI state maps to a value. | `BETA` | Skye | A5 | 5.2 | E07/S07.2 | |
+| ~1s cache + clean recovery | As Mak, I want a source cache and self-healing loop, so many Dials don't hammer the decoder and outages recover. | `GTM` | Mak | A5 | 5.2 | E11/S11.3 | |
+| Last-seen log + demo mode | As Mak, I want a last-seen log and recorded-frame replay, so I can review traffic and demo dry. | `Future` | Mak | A5 | 5.2 | E12/E13 | |
+
+## Out of Scope
+
+> Set `Importance = Future` for deferred items (they can move into scope by changing the lozenge).
+> Rows noted **permanent** are hard non-goals, not deferrals.
+
+| **Requirement (stub)** | **User Story** | Importance | **Persona** | **Action** | **Step** | Ticket | Notes |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Dial decodes ADS-B directly | As Skye, I do *not* want the Dial to decode 1090 MHz — the Pi does all decoding. | `Future` | Skye | A1 | — | — | **Permanent non-goal** |
+| True point-at-aircraft | As Skye, I want the device heading to drive the ring. | `Future` | Skye | A3 | 3.1 | E15/S15.3 | Needs compass/magnetometer |
+| Paid flight-API dependency | As Skye, I want route/model even offline. | `Future` | Skye | A2 | 2.2 | — | **Permanent:** enrichment must degrade gracefully |
+| Safety / navigation use | — | `Future` | — | — | — | — | **Permanent non-goal**; receive-only, not aviation-grade |
+| Public / remote exposure | As Mak, I want it internet-exposed. | `Future` | Mak | A1 | — | — | **Permanent:** local-network only by default |
+| Cardputer companion | As Skye, I want a Cardputer view on the same API. | `Future` | Skye | cross | — | E15/S15.1 | Same `/m5/*` contract |
+| Meshtastic notification bridge | As Skye, I want notable aircraft to notify off-device. | `Future` | Skye | A5 | 5.1 | E15/S15.2 | |
+| Portable GPS / hotspot mode | As Skye, I want portable use away from home. | `Future` | Skye | A1 | — | — | |
+
+## UX Design
+
+The Dial is the presentation layer (firmware, separate repo); this service precomputes everything it
+draws. Reference UX the API must support:
+
+- **Active view** — outer radar ring, blips by `screen_angle_deg`, selected blip highlighted; centre
+  card: callsign · direction label · distance · altitude · vertical state; small orientation hint
+  (`↑ N` / `Kitchen`).
+- **States the API names** (so the Dial can render each): `connecting` · `quiet-sky` (no aircraft in
+  cone) · `active` · `feed-lost` (with last-seen age) · `config`.
+- **Example centre card (MSP):** `EZY82K` / `LTN → PMI` / `A320neo` / `Look NNE` / `3.1 km` /
+  `6,800 ft ↑`.
+
+Full state list and example displays are preserved in `git` history and mirrored by the firmware
+repo; this service's job is to make every one of them renderable from JSON alone.
+
+## Architecture & Technical Considerations
+
+Full design is in **`ARCHITECTURE.md`** (component view, seams, future-state absorption). Key
+considerations:
+
+1. **Thin client / fat Pi** — the Dial does zero geometry; the Pi precomputes angles, labels, states.
+2. **Source-adapter seam** — normalise dump1090/readsb/tar1090 to one canonical model.
+3. **Config-weighted scoring strategy** — tune weights, not code.
+4. **Phased, graceful enrichment** — none → prefix map → cached API (SQLite), never a hard dependency.
+5. **Versioned `/m5/*` contract** — additive-only; endpoints in `ARCHITECTURE.md → API contract`.
+6. **Appliance reliability** — poll loop never throws to the client; explicit states.
+
+**Data model (canonical).** The authoritative shapes live here and are consumed by
+`ARCHITECTURE.md`:
+
+- **`Aircraft`** — raw ADS-B (`hex`, `flight`, `lat`, `lon`, `alt_ft`, `speed_kt`, `track_deg`,
+  `vertical_rate_fpm`, `squawk`, `seen`, `seen_pos`, `rssi`) + **computed** (`bearing_deg`,
+  `bearing_label`, `screen_angle_deg`, `distance_km`, `elevation_deg`, `track_arrow`,
+  `vertical_label`) + **enriched** (`airline`, `origin`, `destination`, `route`, `model`) +
+  **decision** (`score`, `selected_reason`). Enriched/decision fields are always optional.
+- **`Profile`** — `id`, `name`, `radar_up_deg`, `view_cone_deg`, `max_distance_km`,
+  `min_elevation_deg`, `alert_enabled`, `quiet_mode`.
+- **`SkyResponse`** — `ok`, `now`, `profile`, `selected` (index), `aircraft[]`, plus state/alert hints.
+
+**Security & safety.** Receive-only (never transmits on aviation bands); binds to the **local network
+only** by default; any enrichment API keys stay on the Pi in env-vars/secret config, **never** sent to
+the Dial or committed; nothing presents as aviation-grade or navigation-safe.
+
+**Recommended stack** (confirm against Open Issues): Python 3.11+, FastAPI + uvicorn, pydantic,
+SQLite (stdlib) for the enrichment cache, pytest.
+
+## Success Metrics
+
+- **Glance test:** a fixed-window user identifies visible aircraft from the Dial without a phone.
+- **Selection quality:** the auto-pick matches what the eye sees in the majority of arrivals (tuned via debug UI).
+- **Alert quality:** chirps fire on genuine arrivals/best-changes, never every refresh.
+- **Reliability:** runs 30+ min unattended without crashing; recovers cleanly from feed/Wi-Fi loss.
+- **Wow test:** a non-technical observer "gets it" in <5s and says "that's cool" in <20s.
+- **Clonability:** another maker rebuilds it from the README (demo mode proves it dry).
+
+**Acceptance tests** (retained from the original spec):
+- *MVP:* aircraft enters cone → Dial chirps once → blip in correct relative direction → centre shows
+  callsign/direction/distance/altitude → rotary selects others → press returns to auto → empty cone shows "quiet sky".
+- *Wow:* a stranger understands the object in five seconds and is delighted in twenty.
+
+## GTM Approach
+
+Shareable build, not a commercial launch: a short film of the wow, a clean README + config examples,
+and a demo mode. Community distribution (maker forums, socials) and openness to extension.
+
+## Open Issues
+
+1. Which decoder is running — `dump1090-fa` / `readsb` / `tar1090`? (Isolated behind the source adapter; pick a default.)
+2. Exact local `aircraft.json` endpoint/path?
+3. Actual receiver coordinates?
+4. First target window + its compass direction?
+5. Default view cone — 70/90/100/120°? (Start 100°, tune via debug UI.)
+6. Aircraft behind the user — hidden or dimmed?
+7. First enrichment source?
+8. systemd from the start? (Target packaging at MSP; app is a plain ASGI process.)
+9. Config on Pi vs Dial? (Decision: **all config on the Pi**; the Dial only selects.)
+
+## Q&A
+
+| **Asked by** | **Date** | **Question** | **Answer** | **Answered By** | **Accepted By** | **Close Date** |
+| --- | --- | --- | --- | --- | --- | --- |
+| @burtonash | 2026-07-04 | Where does config live — Pi or Dial? | On the Pi; profiles are data, the Dial only selects. | @burtonash | @burtonash | 2026-07-04 |
+
+## Feature Timeline and Phasing
+
+Phasing is driven by the `STORYMAP.md` release slices and delivered via `EPICS.md`. Tier ↔ lozenge:
+
+| Tier | Slice | Lozenge | Outcome |
+| --- | --- | --- | --- |
+| **MTP** | R1 Walking Skeleton | `ALPHA` | Pi serves one sensible aircraft with rough direction; Dial shows it |
+| **MVP** | R2 Enhanced | `BETA` | Best-visible pick, cone filtering, alerts, `/m5/status`; demo-able |
+| **MSP** | R3 Polish | `GTM` | Multi-profile, enrichment, debug UI, packaging; shareable |
+| **MLP** | Ribs | `Future` | Demo mode, interesting alerts, 360/RFID, companion/bridge; delight |
+
+Every tier is a **thin slice across the whole backbone** (A1–A5), never one activity built fully
+before the next. See `EPICS.md` for the epic/story breakdown and per-tier eyeball-QA gates.
