@@ -19,20 +19,21 @@
 | E07 | Alert-state derivation in the API | MVP | A5 | 5 | ✅ Done |
 | E08 | Multi-profile config & profile endpoints | MSP | A1 | 5 | ✅ Done |
 | E09 | Debug web UI | MSP | A5 | 8 | ✅ Done |
-| E10 | Enrichment — prefix map + cached route/model | MSP | A2 | 13 | 🟨 Prefix map done; route/model = seam/stub |
+| E10 | Enrichment — prefix map + cached route/model | MSP | A2 | 13 | ✅ Done (offline; live provider = optional seam) |
 | E11 | Scoring reasons, quiet-mode, packaging & README | MSP | A4·A5·A1 | 8 | ✅ Done |
 | E12 | Demo/replay mode | MLP | A5 | 5 | ✅ Done |
-| E13 | Interesting-aircraft alerts & last-seen log | MLP | A5 | 5 | ⬜ Not started |
+| E13 | Interesting-aircraft alerts & last-seen log | MLP | A5 | 5 | ✅ Done |
 | E14 | 360 mode & RFID/NFC profile-switch support | MLP | A1 | 5 | 🟨 360 cone + switch endpoint done; tag reader is firmware |
 | E15 | Companion & bridge surfaces (Cardputer / Meshtastic / compass) | MLP | cross | 8 | 🟨 Cardputer = same contract; Mesh/compass future |
 
 **Legend:** ⬜ Not started · 🟨 In progress · ✅ Done · ⏸ Blocked. Tiers total — MTP 21 · MVP 26 · MSP 34 · MLP 23.
 
-**Current position:** the **API side is built and verified** — MTP + MVP + MSP back-end complete
-(E01–E09, E11) plus demo mode (E12); the service passes its pytest suite and serves live `/m5/*`
-JSON + debug UI. Remaining: E10 route/model cached provider (offline prefix enrichment is live; the
-external-lookup seam is stubbed), E13 interesting-aircraft alerts + last-seen log, and the E14/E15
-firmware/hardware-side bits. MTP/MVP eyeball-QA now wants a run against a **real** decoder feed (see
+**Current position:** the **API is complete and verified** — MTP + MVP + MSP + the API-side MLP
+work all done (E01–E13); 44 pytest tests pass and the service serves live `/m5/sky`, `/m5/status`,
+`/m5/log`, `/m5/profiles`, `POST /m5/profile` + debug UI. Enrichment is fully offline (airline +
+model + registration + static-table routes behind a SQLite cache; live provider is an optional
+seam). Remaining work is **not** on the API: E14/E15 tag-reader/companion/bridge/compass are
+firmware/hardware. The only outstanding eyeball-QA is a run against a **real** decoder feed (see
 PRD → Success Metrics); demo mode (`SKYDIAL_SOURCE_TYPE=demo`) validates the pipeline dry.
 
 > **Non-atomic flags:** none within a tier — each epic below commits story-by-story in a runnable
@@ -143,10 +144,10 @@ alerts fire on arrivals not every refresh, status reflects reality. Demoable to 
 ### E10 — Enrichment  ·  A2  ·  13 pts
 - **S10.1** *(3)* — As **Skye**, I want static airline-prefix → name mapping (`EZY→easyJet`), so the
   card names the airline offline.
-- **S10.2** *(2)* — As **Skye**, I want an aircraft hex/type static lookup where available, so I see
-  the model without a network call.
-- **S10.3** *(5)* — As **Skye**, I want cached route/model lookup (SQLite, TTL) with graceful
-  fallback, so enrichment feels instant and never breaks the core when offline.
+- **S10.2** *(2)* — As **Skye**, I want an aircraft type → model lookup (from the feed's type code),
+  so I see the model without a network call.
+- **S10.3** *(5)* — As **Skye**, I want cached route lookup (SQLite, TTL) with graceful fallback, so
+  enrichment feels instant and never breaks the core when offline.
 - **S10.4** *(3)* — As **Skye**, I want a `selected_reason` string ("ahead and visible"), so the card
   explains why this plane.
 

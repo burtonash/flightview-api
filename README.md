@@ -46,6 +46,7 @@ coordinates and `source.location`, then `python -m skydial`. Full install (syste
 | -------- | ------- |
 | `GET /m5/sky` | Scored, ordered visible aircraft + `selected` index. `?profile=<id>` overrides. |
 | `GET /m5/status` | Feed health, last-fetch age, raw vs filtered counts, service state. |
+| `GET /m5/log` | Recent last-seen sightings (`?limit=`). |
 | `GET /m5/profiles` | List window profiles + the active one. |
 | `POST /m5/profile` | Switch active profile — body `{"id": "front_bedroom"}`. |
 | `GET /` or `/debug` | Responsive debug UI: radar preview + candidate table with per-factor scores. |
@@ -58,17 +59,24 @@ Example `GET /m5/sky` (trimmed):
   "profile": {"id": "front_bedroom", "radar_up_deg": 0, "view_cone_deg": 100},
   "aircraft": [
     {"flight": "EZY82K", "hex": "407f35", "airline": "easyJet",
+     "model": "Airbus A320neo", "registration": "G-UZHA", "route": "LTN → PMI",
      "bearing_label": "NNE", "screen_angle_deg": 14.0, "distance_km": 2.29,
      "alt_ft": 6800, "vertical_label": "climbing", "score": 87.0,
-     "selected_reason": "straight ahead and close"}
+     "selected_reason": "straight ahead and close", "interesting_reason": null}
   ],
   "alerts": ["new_best_candidate"]
 }
 ```
 
 `state` is one of `connecting` · `quiet-sky` · `active` · `feed-lost`. `alerts` names discrete
-transitions (`new_aircraft`, `new_best_candidate`, `feed_lost`, `feed_restored`) for the Dial's
-buzzer — nothing fires on every refresh.
+transitions (`new_aircraft`, `new_best_candidate`, `interesting_aircraft`, `feed_lost`,
+`feed_restored`) for the Dial's buzzer — nothing fires on every refresh.
+
+**Enrichment** is fully offline and dependency-free: airline from the callsign prefix, model +
+registration from the feed's type code, and route from a static table (`skydial/data/routes.py`)
+behind a SQLite cache. Wire a live route/model provider into `enrichment.py` and the cache sits in
+front of it automatically. `interesting_reason` flags emergency squawks, low-and-close traffic, and
+rotorcraft.
 
 ## Configuration
 

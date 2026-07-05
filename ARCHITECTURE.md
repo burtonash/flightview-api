@@ -45,7 +45,7 @@
                         │   [7] Profile Store (config)  ─────────────────────────┴────────────────────┘          │
                         │            │                                           │                                │
                         │            ▼                                           ▼                                │
-                        │   [8] API Layer (FastAPI)  ── /m5/sky /status /profiles /profile ──►  M5Dial / Cardputer│
+                        │   [8] API Layer (FastAPI)  ── /m5/sky /status /log /profiles /profile ──►  M5Dial/Cardputer│
                         │            │                                                                            │
                         │            └──►  [9] Debug Web UI  (candidate table, scores, radar preview)             │
                         └────────────────────────────────────────────────────────────────────────────────────────┘
@@ -59,16 +59,16 @@
 | 2 | **Canonical Model** | `Aircraft`, `Profile`, `SkyResponse` as validated `pydantic` models — the single vocabulary. | New fields are additive; presenters ignore unknowns. |
 | 3 | **Geo/Compute** | Great-circle distance, true bearing, elevation angle, `screen_angle_deg = bearing − radar_up_deg`, compass labels, track arrows. Pure functions. | Compass/magnetometer "true heading" later feeds `radar_up_deg` dynamically. |
 | 4 | **Filter + Score** | Staleness filter; window-cone/distance/elevation filter; weighted scoring `f(aircraft, profile, weights)`. Strategy objects, config-driven weights. | New scoring factors = new weighted term; no caller changes. |
-| 5 | **Enrichment** | Phase 1 none · Phase 2 static prefix map · Phase 3 cached route/model via SQLite with TTL + graceful fallback. `Enricher` chain. | Add a new provider as a chain link; cache shields the API from rate limits/outages. |
-| 6 | **Selection + Alert-state** | Pick `selected` index; diff against previous tick to derive alert-worthy transitions (new-in-cone, new-best, feed-lost/restored); apply rate-limit/quiet flags. | Firmware stays dumb — it just plays the sound the API names. |
+| 5 | **Enrichment** | Phase 1 none · Phase 2 static prefix map + type→model · Phase 3 cached route via SQLite (TTL + graceful fallback). `Enricher` chain. | Add a provider as a chain link; cache shields the API from rate limits/outages. |
+| 6 | **Selection + Alert-state** | Pick `selected` index; diff against previous tick to derive alert-worthy transitions (new-in-cone, new-best, interesting, feed-lost/restored); apply rate-limit/quiet flags. | Firmware stays dumb — it just plays the sound the API names. |
 | 7 | **Profile Store** | Load/validate window profiles from config; expose current + switch. | RFID/NFC and web-config just call the same switch. |
 | 8 | **API Layer** | FastAPI app serving the `/m5/*` contract; precomputed, tiny payloads (≤8–12 aircraft); ~1s source cache. | Cardputer/other presenters consume the same endpoints. |
 | 9 | **Debug Web UI** | Server-rendered page: current profile, candidate table with per-factor scores, raw vs filtered counts, last fetch/poll times, optional radar preview. | The tuning surface for scoring weights; responsive by default. |
 
 > **Implementation map** (`skydial/`): [1] `sources/` · [2] `models.py` · [3] `geo.py` ·
-> [4] `filters.py` + `scoring.py` · [5] `enrichment.py` (+ `data/airlines.py`) ·
-> [6] `pipeline.py` + `alerts.py` · [7] `profiles.py` · [8] `app.py` · [9] `debug_ui.py`.
-> Config in `config.py`; entrypoint `__main__.py`.
+> [4] `filters.py` + `scoring.py` · [5] `enrichment.py` + `cache.py` (+ `data/airlines.py`,
+> `data/aircraft_types.py`, `data/routes.py`) · [6] `pipeline.py` + `alerts.py` · [7] `profiles.py` ·
+> [8] `app.py` · [9] `debug_ui.py`. Config in `config.py`; entrypoint `__main__.py`.
 
 ---
 
@@ -77,14 +77,14 @@
 Authoritative shapes live in `PRD.md` → Architecture & Technical Considerations → Data model. Architecturally:
 
 - **`Aircraft`** — raw ADS-B fields (hex, flight, lat/lon, alt, speed, track, vertical_rate, seen,
-  rssi) + **computed** (bearing_deg, bearing_label, screen_angle_deg, distance_km, elevation_deg,
-  track_arrow, vertical_label) + **enriched** (airline, origin, destination, route, model) +
-  **decision** (score, selected_reason). Enriched/decision fields are always optional so any stage
-  can be skipped.
+  rssi, type_code, registration) + **computed** (bearing_deg, bearing_label, screen_angle_deg,
+  distance_km, elevation_deg, track_arrow, vertical_label) + **enriched** (airline, origin,
+  destination, route, model) + **decision** (score, selected_reason, interesting_reason).
+  Enriched/decision fields are always optional so any stage can be skipped.
 - **`Profile`** — id, name, radar_up_deg, view_cone_deg, max_distance_km, min_elevation_deg,
   alert_enabled, quiet_mode.
 - **`SkyResponse`** — ok, now, profile, selected (index), aircraft[]. Plus alert/state hints for the
-  Dial.
+  Dial. **`Sighting`** — the last-seen log entry served by `/m5/log`.
 
 Everything the Dial needs is precomputed server-side; the client never derives geometry.
 
@@ -96,6 +96,7 @@ Everything the Dial needs is precomputed server-side; the client never derives g
 | -------- | ------- | ---- |
 | `GET /m5/sky` | Current scored, ordered candidates + selected index. `?profile=` overrides active profile. | MTP→ |
 | `GET /m5/status` | Feed health, last fetch time, raw vs filtered counts, service state. | MVP |
+| `GET /m5/log` | Recent last-seen sightings (rolling log). | MSP |
 | `GET /m5/profiles` | List available window profiles. | MSP |
 | `POST /m5/profile` | Switch active profile (used by long-press, web config, and future RFID/NFC). | MSP |
 
@@ -139,6 +140,7 @@ If a breaking change is ever needed, version the prefix (`/m5/v2/…`) rather th
 | **Full-360 / window-HUD modes** | A profile variant (wide/omni cone); pure data. |
 | **Compass/magnetometer true heading** | Feeds `radar_up_deg` dynamically into Geo/Compute; transform already parameterised. |
 | **Meshtastic / notification bridge** | New subscriber to the Alert-state deriver's events. |
+| **Live route/model provider** | Drop a provider into `enrichment.py`; the SQLite cache already sits in front. |
 | **Extra ADS-B sources / MLAT** | New `SkySource` adapter; canonical model absorbs it. |
 | **Demo/replay mode** | A `SkySource` that reads recorded JSON frames — same interface. |
 
