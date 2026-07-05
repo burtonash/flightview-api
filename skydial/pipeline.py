@@ -6,11 +6,12 @@ resolves to a machine-readable state so the poll loop can't crash the Dial.
 from __future__ import annotations
 
 import time
+from collections import OrderedDict
 from typing import Optional
 
 from . import __version__, geo
-from .alerts import Snapshot, derive_alerts
-from .enrichment import Enricher, default_chain
+from .alerts import Snapshot, derive_alerts, interesting_reason
+from .enrichment import Enricher, build_enricher
 from .filters import in_window, is_fresh
 from .models import (
     STATE_ACTIVE,
@@ -19,6 +20,7 @@ from .models import (
     STATE_QUIET_SKY,
     Aircraft,
     Profile,
+    Sighting,
     SkyResponse,
     StatusResponse,
 )
@@ -33,12 +35,13 @@ class SkyPipeline:
         self.receiver = cfg["receiver"]
         self.source = source or build_source(cfg)
         self.profiles = ProfileStore.from_config(cfg)
-        self.enricher = enricher or default_chain()
+        self.enricher = enricher or build_enricher(cfg)
         self.scoring_cfg = cfg["scoring"]
         self.max_age = float(cfg["max_position_age_s"])
         self.max_candidates = int(cfg["max_candidates"])
         self.cache_ttl = float(cfg["cache_ttl_s"])
         self.feed_lost_after = float(cfg["feed_lost_after_s"])
+        self.log_size = int(cfg.get("log_size", 50))
 
         self._cache_result = None
         self._cache_ts = 0.0
@@ -48,6 +51,8 @@ class SkyPipeline:
         self._last_filtered_count = 0
         self._last_aircraft_count = 0
         self._prev_snapshots: dict[str, Snapshot] = {}
+        # last-seen log: hex -> Sighting, most-recent last
+        self._log: "OrderedDict[str, Sighting]" = OrderedDict()
 
     # --- fetching -------------------------------------------------------- #
     def _fetch_cached(self, now: float):
@@ -109,10 +114,14 @@ class SkyPipeline:
 
         for ac in candidates:
             self.enricher.enrich(ac)
+            ac.interesting_reason = interesting_reason(ac, self.cfg)
         selected = 0 if candidates else None
         if selected is not None:
             top = candidates[0]
             top.selected_reason = reason_for(top.score_factors or {}, self.scoring_cfg)
+
+        self._record_sightings(candidates, int(now))
+        interesting_hexes = {a.hex for a in candidates if a.interesting_reason}
 
         # state
         if self._last_success_ts is None:
@@ -129,6 +138,7 @@ class SkyPipeline:
             feed_ok=feed_ok,
             in_view_hexes={a.hex for a in visible},
             selected_hex=candidates[0].hex if candidates else None,
+            interesting_hexes=interesting_hexes,
         )
         alerts = derive_alerts(self._prev_snapshots.get(profile.id), cur_snap, profile)
         self._prev_snapshots[profile.id] = cur_snap
@@ -145,6 +155,28 @@ class SkyPipeline:
             aircraft=candidates,
             alerts=alerts,
         )
+
+    # --- last-seen log --------------------------------------------------- #
+    def _record_sightings(self, candidates: list[Aircraft], now: int) -> None:
+        for ac in candidates:
+            self._log.pop(ac.hex, None)  # move-to-end on re-sighting
+            self._log[ac.hex] = Sighting(
+                hex=ac.hex,
+                flight=ac.flight,
+                airline=ac.airline,
+                model=ac.model,
+                bearing_label=ac.bearing_label,
+                distance_km=ac.distance_km,
+                alt_ft=ac.alt_ft,
+                last_seen_ts=now,
+            )
+        while len(self._log) > self.log_size:
+            self._log.popitem(last=False)
+
+    def recent_log(self, limit: int = 20) -> list[Sighting]:
+        """Most-recent sightings first."""
+        items = list(self._log.values())[::-1]
+        return items[: max(0, limit)]
 
     def status(self) -> StatusResponse:
         now = time.time()

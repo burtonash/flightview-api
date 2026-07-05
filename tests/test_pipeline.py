@@ -31,6 +31,33 @@ def test_enrichment_airline(demo_cfg):
     assert by_hex["407f35"].airline == "easyJet"  # EZY82K
 
 
+def test_route_and_model_enriched(demo_cfg):
+    pipe = SkyPipeline(demo_cfg)
+    resp = pipe.sky()
+    by_hex = {a.hex: a for a in resp.aircraft}
+    ezy = by_hex["407f35"]
+    assert ezy.model == "Airbus A320neo"  # from type code A20N
+    assert ezy.route == "LTN → PMI"  # from static route table
+    assert ezy.registration == "G-UZHA"
+
+
+def test_interesting_helicopter_flagged(demo_cfg):
+    pipe = SkyPipeline(demo_cfg)
+    resp = pipe.sky()
+    by_hex = {a.hex: a for a in resp.aircraft}
+    assert by_hex["43c2e9"].interesting_reason == "helicopter"  # GXTRA / EC35
+
+
+def test_last_seen_log(demo_cfg):
+    pipe = SkyPipeline(demo_cfg)
+    pipe.sky()
+    log = pipe.recent_log(limit=10)
+    assert log
+    assert all(s.last_seen_ts > 0 for s in log)
+    hexes = {s.hex for s in log}
+    assert "407f35" in hexes
+
+
 def test_status_reports_feed_ok(demo_cfg):
     pipe = SkyPipeline(demo_cfg)
     pipe.sky()

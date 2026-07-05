@@ -42,6 +42,22 @@ DEFAULTS: dict[str, Any] = {
     "feed_lost_after_s": 15.0,
     # Cap the aircraft array returned to the Dial.
     "max_candidates": 10,
+    # Last-seen log size (entries kept for GET /m5/log).
+    "log_size": 50,
+    # Enrichment: offline by default. Cached route lookup sits in front of a
+    # provider (default = static offline route table). No external dependency.
+    "enrichment": {
+        "static_routes": True,
+        "route_cache_enabled": True,
+        "route_cache_path": "skydial_cache.sqlite",
+        "route_cache_ttl_s": 86400.0,
+    },
+    # What counts as an "interesting" aircraft (for interesting_reason + alerts).
+    "interesting": {
+        "low_alt_ft": 4000,
+        "near_km": 8,
+        "emergency_squawks": [7500, 7600, 7700],
+    },
     # Scoring weights (0..1 factors, weighted then summed and scaled to 0..100).
     "scoring": {
         "freshness": 1.0,

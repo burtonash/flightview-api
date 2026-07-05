@@ -29,6 +29,24 @@ cache_ttl_s: 1.0              # cache the raw source read this long
 max_position_age_s: 30.0     # drop aircraft with older positions
 feed_lost_after_s: 15.0      # no successful fetch within this -> feed-lost
 max_candidates: 10           # cap the aircraft array sent to the Dial
+log_size: 50                 # last-seen entries kept for GET /m5/log
+
+# --- Enrichment (all offline by default; no external dependency) -------------
+# airline name (from callsign) + model (from the feed's type code) are always on.
+# Route lookup uses a provider (default: the offline static table in
+# skydial/data/routes.py) with a SQLite cache in front. Point route_cache_path at
+# a writable file, or ":memory:" for none-persisted.
+enrichment:
+  static_routes: true
+  route_cache_enabled: true
+  route_cache_path: "skydial_cache.sqlite"
+  route_cache_ttl_s: 86400.0
+
+# --- What counts as an "interesting" aircraft (flag + alert) -----------------
+interesting:
+  low_alt_ft: 4000           # low AND...
+  near_km: 8                 # ...close -> interesting
+  emergency_squawks: [7500, 7600, 7700]
 
 # --- Scoring weights (tune empirically via the debug UI) ---------------------
 scoring:

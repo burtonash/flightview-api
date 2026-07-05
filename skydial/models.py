@@ -26,6 +26,8 @@ class Aircraft(BaseModel):
     seen: Optional[float] = None
     seen_pos: Optional[float] = None
     rssi: Optional[float] = None
+    type_code: Optional[str] = None
+    registration: Optional[str] = None
 
     # --- computed (this service) ---
     bearing_deg: Optional[float] = None
@@ -47,6 +49,7 @@ class Aircraft(BaseModel):
     score: Optional[float] = None
     selected_reason: Optional[str] = None
     score_factors: Optional[dict[str, float]] = None
+    interesting_reason: Optional[str] = None
 
     @property
     def has_position(self) -> bool:
@@ -79,6 +82,19 @@ class SkyResponse(BaseModel):
     selected: Optional[int] = None
     aircraft: list[Aircraft] = Field(default_factory=list)
     alerts: list[str] = Field(default_factory=list)
+
+
+class Sighting(BaseModel):
+    """A recent aircraft sighting for the last-seen log."""
+
+    hex: str
+    flight: Optional[str] = None
+    airline: Optional[str] = None
+    model: Optional[str] = None
+    bearing_label: Optional[str] = None
+    distance_km: Optional[float] = None
+    alt_ft: Optional[float] = None
+    last_seen_ts: int = 0
 
 
 class StatusResponse(BaseModel):

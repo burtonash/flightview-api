@@ -36,6 +36,10 @@ def create_app(cfg: dict | None = None) -> FastAPI:
     def m5_status():
         return pipeline.status()
 
+    @app.get("/m5/log")
+    def m5_log(limit: int = 20):
+        return {"now": pipeline.status().now, "sightings": pipeline.recent_log(limit)}
+
     @app.get("/m5/profiles")
     def m5_profiles():
         return {

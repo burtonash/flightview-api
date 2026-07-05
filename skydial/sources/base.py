@@ -70,6 +70,8 @@ def normalise_row(row: dict) -> Optional[Aircraft]:
         seen=_first(row, "seen"),
         seen_pos=_first(row, "seen_pos"),
         rssi=_first(row, "rssi"),
+        type_code=(str(_first(row, "t", "type")).strip().upper() if _first(row, "t", "type") else None),
+        registration=(str(_first(row, "r", "reg", "registration")).strip().upper() if _first(row, "r", "reg", "registration") else None),
     )
 
 

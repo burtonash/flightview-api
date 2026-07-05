@@ -23,6 +23,15 @@ def test_status_endpoint(demo_cfg):
     assert j["feed_ok"] is True
 
 
+def test_log_endpoint(demo_cfg):
+    c = _client(demo_cfg)
+    c.get("/m5/sky")
+    j = c.get("/m5/log?limit=5").json()
+    assert "sightings" in j
+    assert len(j["sightings"]) >= 1
+    assert j["sightings"][0]["hex"]
+
+
 def test_profiles_and_switch(demo_cfg):
     demo_cfg["profiles"] = [
         {"id": "north_up", "name": "North Up", "radar_up_deg": 0, "view_cone_deg": 360,
