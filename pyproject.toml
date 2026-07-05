@@ -1,0 +1,26 @@
+[project]
+name = "flightview-api"
+version = "0.1.0"
+description = "SkyDial Pi back-end — ADS-B ingestion, scoring, enrichment and the /m5 API for an M5Dial window HUD."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.29",
+    "pydantic>=2.6",
+    "PyYAML>=6.0",
+    "httpx>=0.27",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+skydial-api = "skydial.__main__:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.setuptools.packages.find]
+include = ["skydial*"]

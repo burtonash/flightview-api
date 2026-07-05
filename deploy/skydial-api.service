@@ -1,0 +1,27 @@
+[Unit]
+Description=SkyDial Pi API (flightview-api)
+Documentation=https://github.com/burtonash/flightview-api
+After=network-online.target
+Wants=network-online.target
+# If your decoder runs as a service, start after it (uncomment and adjust):
+# After=dump1090-fa.service
+
+[Service]
+Type=simple
+User=pi
+WorkingDirectory=/opt/flightview-api
+# Reads /opt/flightview-api/config.yaml (or set SKYDIAL_CONFIG to another path).
+Environment=SKYDIAL_CONFIG=/opt/flightview-api/config.yaml
+ExecStart=/opt/flightview-api/.venv/bin/python -m skydial
+Restart=on-failure
+RestartSec=3
+
+# Hardening — this service only needs to read a local feed and serve HTTP.
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/opt/flightview-api
+
+[Install]
+WantedBy=multi-user.target
