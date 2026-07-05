@@ -19,6 +19,14 @@ Find your `aircraft.json` — it's usually one of:
 | tar1090 / readsb | `http://127.0.0.1:8080/data/aircraft.json` |
 | dump1090-fa (web) | `http://127.0.0.1/dump1090-fa/data/aircraft.json` |
 | dump1090-fa (file) | `/run/dump1090-fa/aircraft.json` |
+| adsb.im / ultrafeeder (Docker) | `http://127.0.0.1:<mapped-port>/data/aircraft.json` |
+
+> **adsb.im / ultrafeeder note:** the feeder image runs tar1090/readsb inside a Docker
+> container whose web root (container port 80) is published on a **non-standard host
+> port** — not 8080. Run `docker ps` and look at the `ultrafeeder` row's port mapping
+> (e.g. `0.0.0.0:1090->80/tcp` means the feed is at `http://127.0.0.1:1090/data/aircraft.json`).
+> The `:8754` feeder homepage gates `/data/` with a 403, so point at the mapped tar1090
+> port, not 8754.
 
 Confirm it responds:
 
@@ -75,6 +83,23 @@ SKYDIAL_SOURCE_TYPE=demo .venv/bin/python -m skydial
 A unit file is provided at [`deploy/skydial-api.service`](deploy/skydial-api.service). It assumes
 the install path `/opt/flightview-api`, the venv at `.venv`, and user `pi` — edit if yours differ.
 
+> **Installing under `/home` instead of `/opt`?** The shipped unit sets
+> `ProtectHome=true`, which makes systemd hide `/home` from the service — so a
+> home-based `WorkingDirectory` becomes unreachable and the service won't start. If you
+> install under your home directory, change `ProtectHome=true` to `ProtectHome=read-only`
+> and set `ReadWritePaths=` to your install dir (the enrichment SQLite cache needs to
+> write there). Also set `User=` to your own account and update every `/opt/flightview-api`
+> path. Example for `~/scripts/flightview-api`:
+>
+> ```ini
+> User=youruser
+> WorkingDirectory=/home/youruser/scripts/flightview-api
+> Environment=SKYDIAL_CONFIG=/home/youruser/scripts/flightview-api/config.yaml
+> ExecStart=/home/youruser/scripts/flightview-api/.venv/bin/python -m skydial
+> ProtectHome=read-only
+> ReadWritePaths=/home/youruser/scripts/flightview-api
+> ```
+
 ```bash
 sudo cp deploy/skydial-api.service /etc/systemd/system/
 # adjust User=/paths in the unit if needed:
@@ -114,7 +139,8 @@ sudo systemctl restart skydial-api
 
 | Symptom | Likely cause / fix |
 | ------- | ------------------ |
-| `state: feed-lost` | `source.location` wrong or decoder down — re-check the `curl` in Prerequisites. |
+| `state: feed-lost` | `source.location` wrong or decoder down — re-check the `curl` in Prerequisites. For an adsb.im/ultrafeeder box, confirm the mapped port via `docker ps` (it's not 8080). |
+| `/m5/status` stuck at `connecting`, `feed_ok: false` | Expected if nothing has polled `/m5/sky` yet — the fetch/scoring cycle is driven by `/m5/sky` (what the Dial polls), and `/m5/status` only *reports* state. `curl .../m5/sky` once, then re-check status; it should flip to `active`. Not a fault. |
 | `state: quiet-sky` always | Cone too narrow / distance too small, or genuinely no traffic. Widen `view_cone_deg`/`max_distance_km`, or test with `SKYDIAL_SOURCE_TYPE=demo`. |
 | Direction looks wrong | Fix `radar_up_deg` for the window; verify against the debug UI radar preview. |
 | Auto-pick feels off | Tune `scoring` weights in `config.yaml` using the per-factor columns in the debug UI. |
