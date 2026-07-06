@@ -78,7 +78,7 @@ DEBUG_HTML = r"""<!doctype html>
   .dialbox{flex:0 0 auto;border:1.5px solid var(--dial);border-radius:16px;background:#080b10;padding:16px;position:relative}
   .cap-dial{position:absolute;top:-11px;left:16px;background:var(--dial);color:#05070c;font-family:var(--mono);font-size:9.5px;font-weight:700;letter-spacing:.08em;padding:3px 9px;border-radius:6px}
   .screen{position:relative;width:min(340px,84vw);aspect-ratio:1;border-radius:50%;overflow:hidden;cursor:pointer;background:var(--screen-bg);box-shadow:inset 0 0 20px rgba(0,0,0,.9),0 0 0 4px #050608}
-  .screen svg{position:absolute;inset:0;width:100%;height:100%}
+  .screen svg#dial{position:absolute;inset:0;width:100%;height:100%}
   .glare{position:absolute;inset:0;border-radius:50%;background:linear-gradient(150deg,rgba(255,255,255,.10) 0%,rgba(255,255,255,0) 32%);pointer-events:none}
   .card{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:0 44px;pointer-events:none}
   .cap-note{text-align:center;font-family:var(--mono);font-size:9.5px;color:#5f6773;margin-top:11px;line-height:1.55}
