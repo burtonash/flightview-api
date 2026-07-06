@@ -59,4 +59,5 @@ def test_debug_ui_served(demo_cfg):
     c = _client(demo_cfg)
     html = c.get("/").text
     assert "SkyDial" in html
-    assert "<canvas" in html
+    assert "Pi Test Harness" in html
+    assert 'id="dial"' in html  # the v2 sector-dial SVG render
